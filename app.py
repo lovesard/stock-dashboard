@@ -262,16 +262,16 @@ st.sidebar.subheader("📐 차트 작도(드로잉) 도구")
 
 draw_mode_label = st.sidebar.radio(
     "🖱️ 마우스 드래그 동작",
-    ["🔍 기본 (확대 / 이동)", "📏 대각선 / 추세선 / 가로선 그리기", "📦 박스권 (사각형) 그리기", "✏️ 자유 곡선 그리기", "🗑️ 그린 선 지우기"],
-    index=1  # 기본값을 선 그리기로 설정하여 바로 그을 수 있게 함
+    ["📏 대각선 / 추세선 / 가로선 그리기", "📦 박스권 (사각형) 그리기", "✏️ 자유 곡선 그리기", "🔍 차트 확대 / 축소 (Zoom)", "✋ 차트 이동 (Pan)"],
+    index=0
 )
 
 draw_mode_map = {
-    "🔍 기본 (확대 / 이동)": "zoom",
     "📏 대각선 / 추세선 / 가로선 그리기": "drawline",
     "📦 박스권 (사각형) 그리기": "drawrect",
     "✏️ 자유 곡선 그리기": "drawopenpath",
-    "🗑️ 그린 선 지우기": "eraseshape"
+    "🔍 차트 확대 / 축소 (Zoom)": "zoom",
+    "✋ 차트 이동 (Pan)": "pan"
 }
 selected_dragmode = draw_mode_map[draw_mode_label]
 
@@ -294,6 +294,8 @@ with col_c1:
 
 with col_c2:
     line_width = st.slider("선 굵기", min_value=1, max_value=5, value=2)
+
+st.sidebar.caption("🗑️ **선 지우기**: 차트 우측 상단 툴바의 **[지우개 아이콘(Erase active shape)]**을 누른 후 지울 선을 클릭하세요.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📌 자동 가격 기준선")
