@@ -156,12 +156,15 @@ selected_period_label = st.sidebar.radio("📅 조회 기간", list(period_map.k
 period_code = period_map[selected_period_label]
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("📐 차트 보조선 설정")
+show_high_low_lines = st.sidebar.checkbox("최고가 / 최저가 가로선 표시", value=False)
+custom_price_line = st.sidebar.number_input("사용자 지정 가격 가로선 (0: 미사용)", min_value=0.0, value=0.0, step=1.0)
+
+st.sidebar.markdown("---")
 st.sidebar.info(
-    "💡 **티커 입력 팁**\n"
-    "- **미국 주식**: `AAPL`, `TSLA`, `NVDA`, `SPY`\n"
-    "- **코스피**: 뒤에 `.KS` (예: `005930.KS`)\n"
-    "- **코스닥**: 뒤에 `.KQ` (예: `091990.KQ`)\n"
-    "- **상단 카드**: Finnhub 실시간 체결 시세 적용"
+    "💡 **차트 그리기 팁**\n"
+    "- **십자선(가로/세로)**: 마우스를 올리면 가격/날짜 십자선이 자동 표시됩니다.\n"
+    "- **직접 그리기**: 차트 우측 상단 툴바의 **✏️ 선 그리기(Draw line)** 아이콘으로 원하는 위치에 자유롭게 지지/저항선을 그릴 수 있습니다."
 )
 
 # ==========================================
@@ -341,7 +344,7 @@ fig.add_trace(
 
 # 차트 레이아웃 스타일
 fig.update_layout(
-    height=600,
+    height=620,
     xaxis_rangeslider_visible=False,
     template="plotly_dark",
     margin=dict(l=20, r=20, t=40, b=20),
@@ -352,13 +355,66 @@ fig.update_layout(
         xanchor="right",
         x=1
     ),
-    hovermode="x unified"
+    hovermode="x unified",
+    # 선 그리기 기본 설정
+    newshape=dict(line_color="#38bdf8", line_width=2, opacity=0.9)
+)
+
+# 마우스 오버 시 가로/세로 십자선 (Spikelines) 활성화
+fig.update_xaxes(
+    showspikes=True,
+    spikemode="across",
+    spikesnap="cursor",
+    spikedash="dot",
+    spikethickness=1,
+    spikecolor="#94a3b8"
+)
+fig.update_yaxes(
+    showspikes=True,
+    spikemode="across",
+    spikesnap="cursor",
+    spikedash="dot",
+    spikethickness=1,
+    spikecolor="#94a3b8"
 )
 
 fig.update_yaxes(title_text=f"가격 ({currency})", row=1, col=1)
 fig.update_yaxes(title_text="거래량", row=2, col=1)
 
-st.plotly_chart(fig, use_container_width=True)
+# 최고가 / 최저가 기준 가로선 추가 (선택 시)
+if show_high_low_lines:
+    fig.add_hline(
+        y=highest_price, line_dash="dash", line_color="#ef4444", line_width=1.5,
+        annotation_text=f"최고가: {format_price(highest_price)}", annotation_position="top left",
+        row=1, col=1
+    )
+    fig.add_hline(
+        y=lowest_price, line_dash="dash", line_color="#3b82f6", line_width=1.5,
+        annotation_text=f"최저가: {format_price(lowest_price)}", annotation_position="bottom left",
+        row=1, col=1
+    )
+
+# 사용자 지정 가격 가로선 추가 (선택 시)
+if custom_price_line > 0:
+    fig.add_hline(
+        y=custom_price_line, line_dash="dot", line_color="#a855f7", line_width=2,
+        annotation_text=f"지정선: {format_price(custom_price_line)}", annotation_position="top right",
+        row=1, col=1
+    )
+
+# 인터랙티브 툴바: 마우스로 직접 선/도형 그리기 및 지우기 버튼 활성화
+chart_config = {
+    "modeBarButtonsToAdd": [
+        "drawline",       # 직접 선 그리기 (가로선/추세선)
+        "drawopenpath",   # 자유 곡선 그리기
+        "drawrect",       # 사각형 그리기 (박스권/매물대)
+        "eraseshape"      # 그린 선 지우기
+    ],
+    "scrollZoom": True,
+    "displaylogo": False
+}
+
+st.plotly_chart(fig, use_container_width=True, config=chart_config)
 
 # ==========================================
 # 8. 상세 데이터 및 CSV 다운로드
