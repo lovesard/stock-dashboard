@@ -258,17 +258,48 @@ selected_period_label = st.sidebar.radio("📅 조회 기간", list(period_map.k
 period_code = period_map[selected_period_label]
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📐 차트 보조선 설정")
+st.sidebar.subheader("📐 차트 작도(드로잉) 도구")
+
+draw_mode_label = st.sidebar.radio(
+    "🖱️ 마우스 드래그 동작",
+    ["🔍 기본 (확대 / 이동)", "📏 대각선 / 추세선 / 가로선 그리기", "📦 박스권 (사각형) 그리기", "✏️ 자유 곡선 그리기", "🗑️ 그린 선 지우기"],
+    index=1  # 기본값을 선 그리기로 설정하여 바로 그을 수 있게 함
+)
+
+draw_mode_map = {
+    "🔍 기본 (확대 / 이동)": "zoom",
+    "📏 대각선 / 추세선 / 가로선 그리기": "drawline",
+    "📦 박스권 (사각형) 그리기": "drawrect",
+    "✏️ 자유 곡선 그리기": "drawopenpath",
+    "🗑️ 그린 선 지우기": "eraseshape"
+}
+selected_dragmode = draw_mode_map[draw_mode_label]
+
+col_c1, col_c2 = st.sidebar.columns(2)
+with col_c1:
+    line_color_choice = st.selectbox(
+        "선 색상",
+        ["🟡 노랑", "🔵 하늘색", "🔴 빨강", "🟢 초록", "🟣 보라", "⚪ 흰색"],
+        index=0
+    )
+    color_map = {
+        "🟡 노랑": "#facc15",
+        "🔵 하늘색": "#38bdf8",
+        "🔴 빨강": "#ef4444",
+        "🟢 초록": "#10b981",
+        "🟣 보라": "#c084fc",
+        "⚪ 흰색": "#ffffff"
+    }
+    selected_line_color = color_map[line_color_choice]
+
+with col_c2:
+    line_width = st.slider("선 굵기", min_value=1, max_value=5, value=2)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📌 자동 가격 기준선")
 show_high_low_lines = st.sidebar.checkbox("최고가 / 최저가 가로선 표시", value=False)
 custom_price_line = st.sidebar.number_input("사용자 지정 가격 가로선 (0: 미사용)", min_value=0.0, value=0.0, step=1.0)
 
-st.sidebar.markdown("---")
-st.sidebar.info(
-    "💡 **검색 꿀팁**\n"
-    "- **한글 검색**: `템퍼스`, `테슬라`, `삼전`, `엔비디아`, `팔란티어`, `카카오` 등\n"
-    "- **영문 검색**: `tempus`, `tesla`, `apple`, `ionq` 등\n"
-    "- **티커 직접 입력**: `TEM`, `AAPL`, `005930.KS` 등"
-)
 
 
 # ==========================================
@@ -448,7 +479,7 @@ fig.add_trace(
 
 # 차트 레이아웃 스타일
 fig.update_layout(
-    height=620,
+    height=640,
     xaxis_rangeslider_visible=False,
     template="plotly_dark",
     margin=dict(l=20, r=20, t=40, b=20),
@@ -460,8 +491,9 @@ fig.update_layout(
         x=1
     ),
     hovermode="x unified",
-    # 선 그리기 기본 설정
-    newshape=dict(line_color="#38bdf8", line_width=2, opacity=0.9)
+    # 사이드바에서 선택한 작도(마우스 드래그) 모드 및 스타일 반영
+    dragmode=selected_dragmode,
+    newshape=dict(line_color=selected_line_color, line_width=line_width, opacity=0.95)
 )
 
 # 마우스 오버 시 가로/세로 십자선 (Spikelines) 활성화
@@ -506,15 +538,16 @@ if custom_price_line > 0:
         row=1, col=1
     )
 
-# 인터랙티브 툴바: 마우스로 직접 선/도형 그리기 및 지우기 버튼 활성화
+# 인터랙티브 툴바 및 드로잉 툴바 설정
 chart_config = {
     "modeBarButtonsToAdd": [
-        "drawline",       # 직접 선 그리기 (가로선/추세선)
+        "drawline",       # 직접 선 그리기 (가로선/대각선/추세선)
+        "drawrect",       # 박스권/사각형 그리기
         "drawopenpath",   # 자유 곡선 그리기
-        "drawrect",       # 사각형 그리기 (박스권/매물대)
-        "eraseshape"      # 그린 선 지우기
+        "eraseshape"      # 그린 작도선 지우기
     ],
     "scrollZoom": True,
+    "displayModeBar": True,  # 툴바 항상 표시
     "displaylogo": False
 }
 
