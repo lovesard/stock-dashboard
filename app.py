@@ -113,37 +113,139 @@ else:
 st.markdown("---")
 
 # ==========================================
-# 4. 사이드바 구성
+# 4. 스마트 종목 검색 헬퍼 및 한글 사전
 # ==========================================
-st.sidebar.title("📊 설정 및 검색")
-
-# 대표 종목 프리셋
-PRESET_STOCKS = {
-    "직접 입력": "",
-    "삼성전자 (005930.KS)": "005930.KS",
-    "SK하이닉스 (000660.KS)": "000660.KS",
-    "현대차 (005380.KS)": "005380.KS",
-    "NAVER (035420.KS)": "035420.KS",
-    "카카오 (035720.KS)": "035720.KS",
-    "Apple (AAPL)": "AAPL",
-    "NVIDIA (NVDA)": "NVDA",
-    "Tesla (TSLA)": "TSLA",
-    "Microsoft (MSFT)": "MSFT",
-    "Alphabet / Google (GOOGL)": "GOOGL",
+KOREAN_STOCK_ALIAS = {
+    # 미국 주요 기업 한글명
+    "템퍼스": ("TEM", "Tempus AI"),
+    "템퍼스AI": ("TEM", "Tempus AI"),
+    "템퍼스에이아이": ("TEM", "Tempus AI"),
+    "팔란티어": ("PLTR", "Palantir Technologies"),
+    "아이온큐": ("IONQ", "IonQ Inc"),
+    "사운드하운드": ("SOUN", "SoundHound AI"),
+    "엔비디아": ("NVDA", "NVIDIA Corporation"),
+    "테슬라": ("TSLA", "Tesla, Inc."),
+    "애플": ("AAPL", "Apple Inc."),
+    "마이크로소프트": ("MSFT", "Microsoft Corporation"),
+    "마소": ("MSFT", "Microsoft Corporation"),
+    "구글": ("GOOGL", "Alphabet Inc."),
+    "알파벳": ("GOOGL", "Alphabet Inc."),
+    "아마존": ("AMZN", "Amazon.com, Inc."),
+    "메타": ("META", "Meta Platforms, Inc."),
+    "페이스북": ("META", "Meta Platforms, Inc."),
+    "넷플릭스": ("NFLX", "Netflix, Inc."),
+    "브로드컴": ("AVGO", "Broadcom Inc."),
+    "슈퍼마이크로": ("SMCI", "Super Micro Computer"),
+    "코인베이스": ("COIN", "Coinbase Global"),
+    "AMD": ("AMD", "Advanced Micro Devices"),
+    "인텔": ("INTC", "Intel Corporation"),
+    "TSMC": ("TSM", "Taiwan Semiconductor"),
+    "모더나": ("MRNA", "Moderna, Inc."),
+    "비트코인": ("BTC-USD", "Bitcoin USD"),
+    # 한국 주요 기업
+    "삼성전자": ("005930.KS", "삼성전자"),
+    "삼전": ("005930.KS", "삼성전자"),
+    "삼성전자우": ("005935.KS", "삼성전자(우)"),
+    "SK하이닉스": ("000660.KS", "SK하이닉스"),
+    "하이닉스": ("000660.KS", "SK하이닉스"),
+    "현대차": ("005380.KS", "현대자동차"),
+    "기아": ("000270.KS", "기아"),
+    "NAVER": ("035420.KS", "NAVER"),
+    "네이버": ("035420.KS", "NAVER"),
+    "카카오": ("035720.KS", "카카오"),
+    "셀트리온": ("068270.KS", "셀트리온"),
+    "알테오젠": ("196170.KQ", "알테오젠"),
+    "에코프로": ("086520.KQ", "에코프로"),
+    "에코프로비엠": ("247540.KQ", "에코프로비엠"),
+    "LG에너지솔루션": ("373220.KS", "LG에너지솔루션"),
+    "엔솔": ("373220.KS", "LG에너지솔루션"),
+    "포스코홀딩스": ("005490.KS", "POSCO홀딩스"),
+    "포스코": ("005490.KS", "POSCO홀딩스"),
+    "크래프톤": ("259960.KS", "크래프톤"),
+    "하이브": ("352820.KS", "하이브"),
 }
 
-selected_preset = st.sidebar.selectbox("🌟 인기 종목 바로가기", list(PRESET_STOCKS.keys()))
+@st.cache_data(ttl=3600)
+def search_yahoo_finance(query: str):
+    """야후 파이낸스 검색 API로 티커 및 회사명 검색"""
+    if not query or len(query.strip()) < 1:
+        return []
+    url = "https://query2.finance.yahoo.com/v1/finance/search"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    params = {"q": query, "quotesCount": 6, "newsCount": 0}
+    try:
+        res = requests.get(url, headers=headers, params=params, timeout=4)
+        if res.status_code == 200:
+            quotes = res.json().get("quotes", [])
+            results = []
+            for q in quotes:
+                symbol = q.get("symbol")
+                name = q.get("shortname") or q.get("longname") or symbol
+                exch = q.get("exchange", "")
+                if symbol:
+                    results.append((symbol, f"{symbol} - {name} ({exch})"))
+            return results
+    except Exception as e:
+        print(f"Search API Error: {e}")
+    return []
 
-if selected_preset == "직접 입력":
-    default_ticker = "AAPL"
+# ==========================================
+# 5. 사이드바 구성
+# ==========================================
+st.sidebar.title("📊 종목 검색 및 설정")
+
+# 스마트 검색 입력창
+search_kw = st.sidebar.text_input(
+    "🔍 한글/영문 종목명 또는 티커 검색",
+    value="",
+    placeholder="예: 템퍼스, 테슬라, 삼전, Apple, NVDA",
+    help="한글 기업명(템퍼스, 삼전 등)이나 영문 회사명, 티커 심볼을 자유롭게 입력하세요."
+).strip()
+
+final_ticker = "AAPL"
+
+# 검색어 분석 및 자동 매칭
+found_options = {}
+
+# 1) 한글 별칭 사전 매칭
+kw_clean = search_kw.replace(" ", "").upper()
+if kw_clean:
+    for alias, (sym, name) in KOREAN_STOCK_ALIAS.items():
+        if kw_clean in alias.upper() or alias.upper() in kw_clean:
+            found_options[f"⭐ {alias} ({sym}) - {name}"] = sym
+
+# 2) 야후 파이낸스 글로벌 자동완성 API 검색
+if search_kw:
+    api_results = search_yahoo_finance(search_kw)
+    for sym, label in api_results:
+        found_options[label] = sym
+
+if found_options:
+    selected_item = st.sidebar.selectbox("🎯 검색 결과에서 선택", list(found_options.keys()))
+    final_ticker = found_options[selected_item]
 else:
-    default_ticker = PRESET_STOCKS[selected_preset]
+    if search_kw:
+        # 검색 결과가 없으면 입력값을 대문자 티커로 직접 사용
+        final_ticker = search_kw.upper()
+    else:
+        # 기본 선택 프리셋
+        PRESET_STOCKS = {
+            "Apple (AAPL)": "AAPL",
+            "Tempus AI (TEM)": "TEM",
+            "NVIDIA (NVDA)": "NVDA",
+            "Tesla (TSLA)": "TSLA",
+            "Palantir (PLTR)": "PLTR",
+            "삼성전자 (005930.KS)": "005930.KS",
+            "SK하이닉스 (000660.KS)": "000660.KS",
+            "현대차 (005380.KS)": "005380.KS",
+            "NAVER (035420.KS)": "035420.KS",
+            "카카오 (035720.KS)": "035720.KS",
+        }
+        selected_preset = st.sidebar.selectbox("🌟 인기 종목 바로가기", list(PRESET_STOCKS.keys()))
+        final_ticker = PRESET_STOCKS[selected_preset]
 
-ticker_input = st.sidebar.text_input(
-    "티커 심볼 입력",
-    value=default_ticker,
-    help="미국: AAPL, TSLA 등 / 한국(코스피): 005930.KS, 한국(코스닥): 035900.KQ"
-).strip().upper()
+ticker_input = final_ticker.strip().upper()
+st.sidebar.caption(f"선택된 티커: **`{ticker_input}`**")
 
 # 기간 선택
 period_map = {
@@ -162,10 +264,12 @@ custom_price_line = st.sidebar.number_input("사용자 지정 가격 가로선 (
 
 st.sidebar.markdown("---")
 st.sidebar.info(
-    "💡 **차트 그리기 팁**\n"
-    "- **십자선(가로/세로)**: 마우스를 올리면 가격/날짜 십자선이 자동 표시됩니다.\n"
-    "- **직접 그리기**: 차트 우측 상단 툴바의 **✏️ 선 그리기(Draw line)** 아이콘으로 원하는 위치에 자유롭게 지지/저항선을 그릴 수 있습니다."
+    "💡 **검색 꿀팁**\n"
+    "- **한글 검색**: `템퍼스`, `테슬라`, `삼전`, `엔비디아`, `팔란티어`, `카카오` 등\n"
+    "- **영문 검색**: `tempus`, `tesla`, `apple`, `ionq` 등\n"
+    "- **티커 직접 입력**: `TEM`, `AAPL`, `005930.KS` 등"
 )
+
 
 # ==========================================
 # 5. 주가 데이터 로딩 및 지표 계산
