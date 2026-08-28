@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -417,143 +418,210 @@ with c4:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 7. 메인 차트: 인터랙티브 캔들스틱 + 이평선 + 거래량
+# 7. 메인 차트: 트레이딩뷰 프로 차트 & 인터랙티브 분석 차트
 # ==========================================
-st.markdown("### 📈 인터랙티브 캔들스틱 차트")
+st.markdown("### 📈 주가 차트 및 작도 스튜디오")
 
-fig = make_subplots(
-    rows=2, cols=1,
-    shared_xaxes=True,
-    vertical_spacing=0.04,
-    row_heights=[0.75, 0.25],
-    subplot_titles=(f"{ticker_input} 주가 및 이동평균선", "거래량 (Volume)")
-)
+# 트레이딩뷰 심볼 매핑 함수
+def get_tradingview_symbol(ticker: str):
+    ticker = ticker.upper().strip()
+    if ticker.endswith(".KS"):
+        return f"KRX:{ticker.replace('.KS', '')}"
+    elif ticker.endswith(".KQ"):
+        return f"KOSDAQ:{ticker.replace('.KQ', '')}"
+    elif ticker == "BTC-USD":
+        return "BINANCE:BTCUSDT"
+    elif ":" in ticker:
+        return ticker
+    else:
+        return ticker
 
-# 1) 캔들스틱 차트
-fig.add_trace(
-    go.Candlestick(
-        x=df.index,
-        open=df["Open"],
-        high=df["High"],
-        low=df["Low"],
-        close=df["Close"],
-        name="주가",
-        increasing_line_color="#ef4444",  # 상승: 빨강
-        decreasing_line_color="#3b82f6"   # 하락: 파랑
-    ),
-    row=1, col=1
-)
+tv_symbol = get_tradingview_symbol(ticker_input)
 
-# 2) 20일 이동평균선
-fig.add_trace(
-    go.Scatter(
-        x=df.index,
-        y=df["MA20"],
-        line=dict(color="#f59e0b", width=1.5),
-        name="20일 이평선"
-    ),
-    row=1, col=1
-)
+tab_tv, tab_plotly = st.tabs(["🌟 트레이딩뷰 프로 차트 (TradingView Studio)", "📊 이평선/거래량 분석 & 수평선 매니저"])
 
-# 3) 60일 이동평균선
-fig.add_trace(
-    go.Scatter(
-        x=df.index,
-        y=df["MA60"],
-        line=dict(color="#10b981", width=1.5),
-        name="60일 이평선"
-    ),
-    row=1, col=1
-)
+with tab_tv:
+    st.caption("💡 **트레이딩뷰 작도 팁**: 좌측 툴바에서 **수평선 (단축키 Alt+H)**, **추세선 (단축키 Alt+T)**, 피보나치 등을 클릭 한 번으로 무제한 자유 작도할 수 있습니다.")
+    
+    # TradingView Advanced Real-Time Chart Widget HTML
+    tv_widget_html = f"""
+    <!-- TradingView Widget BEGIN -->
+    <div class="tradingview-widget-container" style="height:650px;width:100%">
+      <div id="tradingview_pro_chart" style="height:calc(100% - 32px);width:100%"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget(
+      {{
+        "autosize": true,
+        "symbol": "{tv_symbol}",
+        "interval": "D",
+        "timezone": "Asia/Seoul",
+        "theme": "dark",
+        "style": "1",
+        "locale": "kr",
+        "toolbar_bg": "#f1f3f6",
+        "enable_publishing": false,
+        "hide_side_toolbar": false,
+        "allow_symbol_change": true,
+        "save_image": true,
+        "details": true,
+        "hotlist": true,
+        "calendar": false,
+        "studies": [
+          "MASimple@tv-basicstudies",
+          "MAExp@tv-basicstudies"
+        ],
+        "container_id": "tradingview_pro_chart"
+      }}
+      );
+      </script>
+    </div>
+    <!-- TradingView Widget END -->
+    """
+    components.html(tv_widget_html, height=660)
 
-# 4) 거래량 바 차트
-colors = ['#ef4444' if row['Close'] >= row['Open'] else '#3b82f6' for _, row in df.iterrows()]
-fig.add_trace(
-    go.Bar(
-        x=df.index,
-        y=df["Volume"],
-        name="거래량",
-        marker_color=colors,
-        opacity=0.7
-    ),
-    row=2, col=1
-)
+with tab_plotly:
+    # 세션 상태에 수평선 저장 리스트 초기화
+    if "custom_lines" not in st.session_state:
+        st.session_state.custom_lines = []
 
-# 차트 레이아웃 스타일
-fig.update_layout(
-    height=640,
-    xaxis_rangeslider_visible=False,
-    template="plotly_dark",
-    margin=dict(l=20, r=20, t=40, b=20),
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    ),
-    hovermode="x unified",
-    # 사이드바에서 선택한 작도(마우스 드래그) 모드 및 스타일 반영
-    dragmode=selected_dragmode,
-    newshape=dict(line_color=selected_line_color, line_width=line_width, opacity=0.95)
-)
+    # 원클릭 수평선 추가 툴바
+    st.markdown("#### ⚡ 원클릭 반듯한 수평선(가로선) 추가")
+    col_h1, col_h2, col_h3, col_h4 = st.columns([1.5, 1, 1, 1])
+    with col_h1:
+        new_line_val = st.number_input("가격을 입력하여 수평선 긋기", value=float(round(latest_close, 2)), step=1.0, label_visibility="collapsed")
+    with col_h2:
+        if st.button("➕ 가로선 추가", use_container_width=True):
+            if new_line_val not in st.session_state.custom_lines:
+                st.session_state.custom_lines.append(new_line_val)
+                st.rerun()
+    with col_h3:
+        if st.button(f"📍 현재가선 ({format_price(latest_close)})", use_container_width=True):
+            if latest_close not in st.session_state.custom_lines:
+                st.session_state.custom_lines.append(latest_close)
+                st.rerun()
+    with col_h4:
+        if st.button("🗑️ 추가한 수평선 모두 삭제", use_container_width=True):
+            st.session_state.custom_lines = []
+            st.rerun()
 
-# 마우스 오버 시 가로/세로 십자선 (Spikelines) 활성화
-fig.update_xaxes(
-    showspikes=True,
-    spikemode="across",
-    spikesnap="cursor",
-    spikedash="dot",
-    spikethickness=1,
-    spikecolor="#94a3b8"
-)
-fig.update_yaxes(
-    showspikes=True,
-    spikemode="across",
-    spikesnap="cursor",
-    spikedash="dot",
-    spikethickness=1,
-    spikecolor="#94a3b8"
-)
+    if st.session_state.custom_lines:
+        line_tags = ", ".join([format_price(p) for p in st.session_state.custom_lines])
+        st.info(f"현재 표시 중인 수평선 목록: **{line_tags}**")
 
-fig.update_yaxes(title_text=f"가격 ({currency})", row=1, col=1)
-fig.update_yaxes(title_text="거래량", row=2, col=1)
-
-# 최고가 / 최저가 기준 가로선 추가 (선택 시)
-if show_high_low_lines:
-    fig.add_hline(
-        y=highest_price, line_dash="dash", line_color="#ef4444", line_width=1.5,
-        annotation_text=f"최고가: {format_price(highest_price)}", annotation_position="top left",
-        row=1, col=1
-    )
-    fig.add_hline(
-        y=lowest_price, line_dash="dash", line_color="#3b82f6", line_width=1.5,
-        annotation_text=f"최저가: {format_price(lowest_price)}", annotation_position="bottom left",
-        row=1, col=1
+    # Plotly 캔들스틱 + 이평선 + 거래량 서브플롯
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.04,
+        row_heights=[0.75, 0.25],
+        subplot_titles=(f"{ticker_input} 주가 및 이동평균선", "거래량 (Volume)")
     )
 
-# 사용자 지정 가격 가로선 추가 (선택 시)
-if custom_price_line > 0:
-    fig.add_hline(
-        y=custom_price_line, line_dash="dot", line_color="#a855f7", line_width=2,
-        annotation_text=f"지정선: {format_price(custom_price_line)}", annotation_position="top right",
+    # 1) 캔들스틱
+    fig.add_trace(
+        go.Candlestick(
+            x=df.index,
+            open=df["Open"],
+            high=df["High"],
+            low=df["Low"],
+            close=df["Close"],
+            name="주가",
+            increasing_line_color="#ef4444",
+            decreasing_line_color="#3b82f6"
+        ),
         row=1, col=1
     )
 
-# 인터랙티브 툴바 및 드로잉 툴바 설정
-chart_config = {
-    "modeBarButtonsToAdd": [
-        "drawline",       # 직접 선 그리기 (가로선/대각선/추세선)
-        "drawrect",       # 박스권/사각형 그리기
-        "drawopenpath",   # 자유 곡선 그리기
-        "eraseshape"      # 그린 작도선 지우기
-    ],
-    "scrollZoom": True,
-    "displayModeBar": True,  # 툴바 항상 표시
-    "displaylogo": False
-}
+    # 2) 20일 이동평균선
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["MA20"],
+            line=dict(color="#f59e0b", width=1.5),
+            name="20일 이평선"
+        ),
+        row=1, col=1
+    )
 
-st.plotly_chart(fig, use_container_width=True, config=chart_config)
+    # 3) 60일 이동평균선
+    fig.add_trace(
+        go.Scatter(
+            x=df.index,
+            y=df["MA60"],
+            line=dict(color="#10b981", width=1.5),
+            name="60일 이평선"
+        ),
+        row=1, col=1
+    )
+
+    # 4) 거래량
+    colors = ['#ef4444' if row['Close'] >= row['Open'] else '#3b82f6' for _, row in df.iterrows()]
+    fig.add_trace(
+        go.Bar(
+            x=df.index,
+            y=df["Volume"],
+            name="거래량",
+            marker_color=colors,
+            opacity=0.7
+        ),
+        row=2, col=1
+    )
+
+    # 원클릭으로 추가된 수평선들 모두 차트에 렌더링
+    for idx, line_price in enumerate(st.session_state.custom_lines):
+        fig.add_hline(
+            y=line_price, line_dash="solid", line_color="#38bdf8", line_width=2,
+            annotation_text=f"수평선: {format_price(line_price)}", annotation_position="top right",
+            row=1, col=1
+        )
+
+    # 최고가 / 최저가 기준 가로선
+    if show_high_low_lines:
+        fig.add_hline(
+            y=highest_price, line_dash="dash", line_color="#ef4444", line_width=1.5,
+            annotation_text=f"최고가: {format_price(highest_price)}", annotation_position="top left",
+            row=1, col=1
+        )
+        fig.add_hline(
+            y=lowest_price, line_dash="dash", line_color="#3b82f6", line_width=1.5,
+            annotation_text=f"최저가: {format_price(lowest_price)}", annotation_position="bottom left",
+            row=1, col=1
+        )
+
+    # 사이드바 지정선
+    if custom_price_line > 0:
+        fig.add_hline(
+            y=custom_price_line, line_dash="dot", line_color="#a855f7", line_width=2,
+            annotation_text=f"지정선: {format_price(custom_price_line)}", annotation_position="top right",
+            row=1, col=1
+        )
+
+    fig.update_layout(
+        height=620,
+        xaxis_rangeslider_visible=False,
+        template="plotly_dark",
+        margin=dict(l=20, r=20, t=40, b=20),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+        dragmode=selected_dragmode,
+        newshape=dict(line_color=selected_line_color, line_width=line_width, opacity=0.95)
+    )
+
+    fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor", spikedash="dot", spikethickness=1, spikecolor="#94a3b8")
+    fig.update_yaxes(showspikes=True, spikemode="across", spikesnap="cursor", spikedash="dot", spikethickness=1, spikecolor="#94a3b8")
+    fig.update_yaxes(title_text=f"가격 ({currency})", row=1, col=1)
+    fig.update_yaxes(title_text="거래량", row=2, col=1)
+
+    chart_config = {
+        "modeBarButtonsToAdd": ["drawline", "drawrect", "drawopenpath", "eraseshape"],
+        "scrollZoom": True,
+        "displayModeBar": True,
+        "displaylogo": False
+    }
+
+    st.plotly_chart(fig, use_container_width=True, config=chart_config)
+
 
 # ==========================================
 # 8. 상세 데이터 및 CSV 다운로드
